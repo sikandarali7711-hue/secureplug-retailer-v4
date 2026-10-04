@@ -1544,37 +1544,51 @@ function generateQr(data) {
     return;
   }
   if (typeof QRCode === 'undefined') {
-    console.error('QRCode library not loaded — retrying...');
+    console.error('QRCode library not loaded — retrying in 500ms');
     setTimeout(function() { generateQr(data); }, 500);
     return;
   }
   try {
-    QRCode.toCanvas(canvas, data, {
+    // Try promise-based API first (newer versions)
+    const result = QRCode.toCanvas(canvas, data, {
       width: 220,
       margin: 1,
       color: { dark: '#0a0a0f', light: '#ffffff' }
-    }, function(err) {
-      if (err) {
-        console.error('QR error', err);
-      } else {
-        console.log('QR generated OK');
-      }
     });
+    if (result && typeof result.then === 'function') {
+      result.then(function() {
+        console.log('QR generated OK (promise)');
+      }).catch(function(err) {
+        console.error('QR promise failed', err);
+        fallbackQrImage(data, canvas);
+      });
+    } else {
+      console.log('QR generated OK (callback/sync)');
+    }
   } catch (e) {
     console.error('QR exception', e);
-    try {
-      QRCode.toDataURL(data, { width: 220, margin: 1 }, function(err, url) {
-        if (err) return;
+    fallbackQrImage(data, canvas);
+  }
+}
+
+function fallbackQrImage(data, canvas) {
+  try {
+    QRCode.toDataURL(data, { width: 220, margin: 1 })
+      .then(function(url) {
         const img = document.createElement('img');
         img.src = url;
         img.style.width = '220px';
         img.style.height = '220px';
+        img.style.display = 'block';
         canvas.parentNode.innerHTML = '';
         canvas.parentNode.appendChild(img);
+        console.log('QR generated via fallback (image)');
+      })
+      .catch(function(err) {
+        console.error('Fallback QR failed', err);
       });
-    } catch (e2) {
-      console.error('QR fallback failed', e2);
-    }
+  } catch (e) {
+    console.error('Fallback exception', e);
   }
 }
 
