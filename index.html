@@ -1539,58 +1539,60 @@ function openQrEnrollModal(device) {
   modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
 
 function generateQr(data) {
-  const canvas = $('qrCanvas');
-  if (!canvas) {
-    console.error('QR canvas not found');
+  const container = $('qrContainer');
+  if (!container) {
+    console.error('QR container not found');
     return;
   }
-  if (typeof QRCode === 'undefined') {
-    console.error('QRCode library not loaded — retrying in 500ms');
-    setTimeout(function() { generateQr(data); }, 500);
-    return;
-  }
-  try {
-    // Try promise-based API first (newer versions)
-    const result = QRCode.toCanvas(canvas, data, {
-      width: 220,
-      margin: 1,
-      color: { dark: '#0a0a0f', light: '#ffffff' }
-    });
-    if (result && typeof result.then === 'function') {
-      result.then(function() {
-        console.log('QR generated OK (promise)');
-      }).catch(function(err) {
-        console.error('QR promise failed', err);
-        fallbackQrImage(data, canvas);
-      });
-    } else {
-      console.log('QR generated OK (callback/sync)');
-    }
-  } catch (e) {
-    console.error('QR exception', e);
-    fallbackQrImage(data, canvas);
-  }
-}
 
-function fallbackQrImage(data, canvas) {
-  try {
-    QRCode.toDataURL(data, { width: 220, margin: 1 })
-      .then(function(url) {
-        const img = document.createElement('img');
-        img.src = url;
-        img.style.width = '220px';
-        img.style.height = '220px';
-        img.style.display = 'block';
-        canvas.parentNode.innerHTML = '';
-        canvas.parentNode.appendChild(img);
-        console.log('QR generated via fallback (image)');
-      })
-      .catch(function(err) {
-        console.error('Fallback QR failed', err);
+  // Try qrcodejs first (more reliable on mobile)
+  if (typeof QRCode !== 'undefined' && QRCode.prototype && QRCode.prototype.makeCode) {
+    try {
+      container.innerHTML = '';
+      const qr = new QRCode(container, {
+        text: data,
+        width: 220,
+        height: 220,
+        colorDark: '#0a0a0f',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
       });
-  } catch (e) {
-    console.error('Fallback exception', e);
+      console.log('QR generated via qrcodejs');
+      return;
+    } catch (e) {
+      console.error('qrcodejs failed', e);
+    }
   }
+
+  // Fallback: node-qrcode library (toDataURL)
+  if (typeof QRCode !== 'undefined' && QRCode.toDataURL) {
+    try {
+      const promise = QRCode.toDataURL(data, { width: 220, margin: 1 });
+      if (promise && typeof promise.then === 'function') {
+        promise.then(function(url) {
+          container.innerHTML = '<img src="' + url + '" style="width:220px;height:220px;display:block;" alt="QR" />';
+          console.log('QR generated via toDataURL promise');
+        }).catch(function(err) {
+          console.error('toDataURL promise failed', err);
+        });
+      } else {
+        QRCode.toDataURL(data, { width: 220, margin: 1 }, function(err, url) {
+          if (err) {
+            console.error('toDataURL callback err', err);
+            return;
+          }
+          container.innerHTML = '<img src="' + url + '" style="width:220px;height:220px;display:block;" alt="QR" />';
+          console.log('QR generated via toDataURL callback');
+        });
+      }
+      return;
+    } catch (e) {
+      console.error('node-qrcode failed', e);
+    }
+  }
+
+  console.error('No QR library available');
+}
 }
 
   // QR code — library load hone ke baad generate karein
