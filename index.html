@@ -1013,15 +1013,418 @@ function openAddDeviceModal(parentContainer, customers) {
 /* ═══════════════════════════════════════════════════
    DEVICE DETAIL — PLACEHOLDER (Part 3-B mein aayega)
 ═══════════════════════════════════════════════════ */
-function openDeviceDetail(parentContainer, deviceId) {
+async function openDeviceDetail(parentContainer, deviceId) {
   const c = parentContainer;
-  c.innerHTML = '<div class="fade-up space-y-4">' +
-    '<button id="backToDev" class="glass-2 px-4 py-2 rounded-xl text-sm flex items-center gap-2 active:scale-95"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>' +
-    '<div class="glass p-6 text-center"><i data-lucide="loader" class="w-8 h-8 mx-auto text-[#ff6b35] spin mb-3"></i><p class="text-sm text-white/60">Device detail Part 3-B mein aayega</p><p class="text-xs text-white/30 mt-2">Device ID: ' + escapeHtml(deviceId) + '</p></div>' +
-  '</div>';
+  c.innerHTML = '<div class="fade-up space-y-4"><div class="skel h-40"></div><div class="skel h-24"></div><div class="skel h-24"></div></div>';
+
+  try {
+    // Parallel fetch — device, customer, emi plan, status
+    const results = await Promise.all([
+      sb.from('devices').select('*').eq('id', deviceId).eq('business_id', State.businessId).maybeSingle(),
+      sb.from('emi_plans').select('*').eq('device_id', deviceId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      sb.from('device_status').select('*').eq('device_id', deviceId).maybeSingle()
+    ]);
+
+    const device = results[0].data;
+    const emiPlan = results[1].data;
+    const devStatus = results[2].data;
+
+    if (!device) {
+      toast('Device nahi mila', 'err');
+      renderDevices(c);
+      return;
+    }
+
+    // Fetch customer
+    let customer = null;
+    if (device.customer_id) {
+      const cres = await sb.from('customers').select('*').eq('id', device.customer_id).maybeSingle();
+      customer = cres.data;
+    }
+
+    // Fetch payment history
+    let payments = [];
+    try {
+      const pres = await sb.from('payments').select('*').eq('device_id', deviceId).order('created_at', { ascending: false });
+      payments = pres.data || [];
+    } catch(e) {}
+
+    // Calculate EMI values
+    const total = Number(emiPlan && emiPlan.total_amount || 0);
+    const down = Number(emiPlan && emiPlan.down_payment || 0);
+    const monthly = Number(emiPlan && emiPlan.monthly_amount || 0);
+    const tenure = Number(emiPlan && emiPlan.tenure_months || 0);
+    const paidMonths = Number(emiPlan && emiPlan.paid_months || 0);
+    const paidAmount = Number(emiPlan && emiPlan.paid_amount || 0);
+    const remaining = total - down - paidAmount;
+    const totalPaid = down + paidAmount;
+    const progressPct = total > 0 ? Math.min(100, Math.round((totalPaid / total) * 100)) : 0;
+
+    // Next due date
+    let nextDueDate = '—';
+    if (emiPlan && emiPlan.first_due_date) {
+      const d = new Date(emiPlan.first_due_date);
+      d.setMonth(d.getMonth() + paidMonths);
+      nextDueDate = fmtDate(d);
+    }
+
+    // Customer info
+    const custName = customer ? (customer.name || 'Unnamed') : 'Unknown';
+    const custPhone = customer ? (customer.phone || '') : '';
+    const phoneClean = custPhone.replace(/[^0-9]/g, '');
+
+    const status = device.status || 'active';
+    const badgeClass = status === 'locked' ? 'badge-red' : status === 'overdue' ? 'badge-orange' : 'badge-green';
+    const badgeText = status === 'locked' ? '🔒 Locked' : status === 'overdue' ? '⚠ Overdue' : '● Active';
+
+    // Live status indicators
+    let online = false;
+    let lastSeen = '—';
+    let batteryPct = '—';
+    let network = '—';
+    if (devStatus) {
+      lastSeen = devStatus.last_seen ? timeAgo(devStatus.last_seen) : '—';
+      if (devStatus.last_seen) {
+        const diff = (Date.now() - new Date(devStatus.last_seen).getTime()) / 1000;
+        online = diff < 120; // online if seen within 2 minutes
+      }
+      batteryPct = devStatus.battery_level != null ? devStatus.battery_level + '%' : '—';
+      network = devStatus.network_type || '—';
+    }
+
+    // Build UI
+    const onlineBadge = online
+      ? '<span class="badge badge-green"><span class="inline-block w-1.5 h-1.5 rounded-full bg-green-400 mr-1"></span>Online</span>'
+      : '<span class="badge badge-gray">● Offline</span>';
+
+    const callBtns = phoneClean
+      ? '<a href="tel:' + phoneClean + '" class="glass-2 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-medium active:scale-95"><i data-lucide="phone" class="w-4 h-4 text-green-400"></i> Call</a>' +
+        '<a href="https://wa.me/' + (phoneClean.charAt(0) === '0' ? '92' + phoneClean.slice(1) : phoneClean) + '" target="_blank" class="glass-2 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-medium active:scale-95"><i data-lucide="message-circle" class="w-4 h-4 text-green-400"></i> WhatsApp</a>'
+      : '';
+
+    c.innerHTML = '<div class="fade-up space-y-4">' +
+
+      // Back button
+      '<button id="backToDev" class="glass-2 px-4 py-2 rounded-xl text-sm flex items-center gap-2 active:scale-95"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>' +
+
+      // Device header
+      '<div class="glass p-5">' +
+        '<div class="flex items-center gap-4">' +
+          '<div class="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style="background: linear-gradient(135deg,#8b5cf6,#6366f1);">' +
+            '<i data-lucide="smartphone" class="w-7 h-7 text-white"></i>' +
+          '</div>' +
+          '<div class="flex-1 min-w-0">' +
+            '<h2 class="text-lg font-bold truncate">' + escapeHtml(device.brand ? device.brand + ' ' + (device.model || '') : (device.model || 'Device')) + '</h2>' +
+            '<p class="text-xs text-white/40 mt-0.5 font-mono">IMEI: ' + escapeHtml(device.imei || '—') + '</p>' +
+            '<div class="flex items-center gap-2 mt-2">' + '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' + onlineBadge + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<p class="text-[10px] text-white/30 mt-3">Last seen: ' + lastSeen + '</p>' +
+      '</div>' +
+
+      // Customer info
+      (customer ? '<div class="glass p-5">' +
+        '<p class="text-xs text-white/40 uppercase tracking-wider mb-3">Customer</p>' +
+        '<div class="flex items-center gap-3 mb-4">' +
+          '<div class="w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-sm flex-shrink-0" style="background: linear-gradient(135deg,#ff6b35,#ea580c);">' +
+            ((custName).split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase()) +
+          '</div>' +
+          '<div class="min-w-0">' +
+            '<p class="font-semibold text-sm truncate">' + escapeHtml(custName) + '</p>' +
+            '<p class="text-xs text-white/50 mt-0.5">' + escapeHtml(custPhone) + '</p>' +
+          '</div>' +
+        '</div>' +
+        '<div class="grid grid-cols-2 gap-2">' + callBtns + '</div>' +
+      '</div>' : '') +
+
+      // EMI progress
+      (emiPlan ? '<div class="glass p-5">' +
+        '<p class="text-xs text-white/40 uppercase tracking-wider mb-3">EMI Plan</p>' +
+        '<div class="flex justify-between items-baseline mb-4">' +
+          '<div>' +
+            '<p class="text-[10px] text-white/40">Remaining</p>' +
+            '<p class="text-2xl font-bold text-[#ff6b35]">' + fmtPKR(remaining) + '</p>' +
+          '</div>' +
+          '<div class="text-right">' +
+            '<p class="text-[10px] text-white/40">Total</p>' +
+            '<p class="text-sm font-semibold text-white/70">' + fmtPKR(total) + '</p>' +
+          '</div>' +
+        '</div>' +
+
+        // Progress bar
+        '<div class="h-2 bg-white/10 rounded-full overflow-hidden mb-2">' +
+          '<div class="h-full btn-grad rounded-full transition-all" style="width: ' + progressPct + '%"></div>' +
+        '</div>' +
+        '<div class="flex justify-between text-[10px] text-white/40 mb-4">' +
+          '<span>' + progressPct + '% paid</span>' +
+          '<span>' + paidMonths + '/' + tenure + ' months</span>' +
+        '</div>' +
+
+        '<div class="grid grid-cols-2 gap-3 text-sm">' +
+          '<div class="glass-2 p-3 rounded-xl">' +
+            '<p class="text-[10px] text-white/40">Monthly</p>' +
+            '<p class="font-bold mt-0.5">' + fmtPKR(monthly) + '</p>' +
+          '</div>' +
+          '<div class="glass-2 p-3 rounded-xl">' +
+            '<p class="text-[10px] text-white/40">Next Due</p>' +
+            '<p class="font-bold mt-0.5 text-[#ff6b35]">' + nextDueDate + '</p>' +
+          '</div>' +
+        '</div>' +
+      '</div>' : '') +
+
+      // Live status
+      '<div class="glass p-5">' +
+        '<p class="text-xs text-white/40 uppercase tracking-wider mb-3">Live Status</p>' +
+        '<div class="grid grid-cols-3 gap-2">' +
+          '<div class="glass-2 p-3 rounded-xl text-center">' +
+            '<i data-lucide="battery" class="w-4 h-4 text-green-400 mx-auto mb-1"></i>' +
+            '<p class="text-[9px] text-white/40 uppercase">Battery</p>' +
+            '<p class="text-sm font-bold mt-0.5">' + batteryPct + '</p>' +
+          '</div>' +
+          '<div class="glass-2 p-3 rounded-xl text-center">' +
+            '<i data-lucide="wifi" class="w-4 h-4 text-blue-400 mx-auto mb-1"></i>' +
+            '<p class="text-[9px] text-white/40 uppercase">Network</p>' +
+            '<p class="text-sm font-bold mt-0.5">' + escapeHtml(network) + '</p>' +
+          '</div>' +
+          '<div class="glass-2 p-3 rounded-xl text-center">' +
+            '<i data-lucide="clock" class="w-4 h-4 text-purple-400 mx-auto mb-1"></i>' +
+            '<p class="text-[9px] text-white/40 uppercase">Seen</p>' +
+            '<p class="text-xs font-bold mt-0.5">' + lastSeen + '</p>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      // ═══ DEVICE CONTROLS ═══
+      '<div class="glass p-5">' +
+        '<p class="text-xs text-white/40 uppercase tracking-wider mb-3">Device Controls</p>' +
+
+        // Lock / Unlock row
+        '<div class="grid grid-cols-2 gap-3 mb-3">' +
+          '<button id="btnLock" class="btn-grad ripple py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2">' +
+            '<i data-lucide="lock" class="w-4 h-4"></i> Lock Device' +
+          '</button>' +
+          '<button id="btnUnlock" class="glass-2 ripple py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2">' +
+            '<i data-lucide="unlock" class="w-4 h-4"></i> Unlock' +
+          '</button>' +
+        '</div>' +
+
+        // Camera
+        '<div class="glass-2 p-4 rounded-xl mb-3">' +
+          '<div class="flex items-center justify-between">' +
+            '<div class="flex items-center gap-3">' +
+              '<i data-lucide="camera" class="w-5 h-5 text-[#ff6b35]"></i>' +
+              '<div>' +
+                '<p class="text-sm font-medium">Camera</p>' +
+                '<p class="text-[10px] text-white/40">Disable phone camera</p>' +
+              '</div>' +
+            '</div>' +
+            '<div class="flex gap-2">' +
+              '<button id="btnCamOff" class="px-3 py-1.5 rounded-lg bg-red-500/15 text-red-400 text-xs font-semibold active:scale-95">OFF</button>' +
+              '<button id="btnCamOn" class="px-3 py-1.5 rounded-lg bg-green-500/15 text-green-400 text-xs font-semibold active:scale-95">ON</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+
+        // WhatsApp
+        '<div class="glass-2 p-4 rounded-xl mb-3">' +
+          '<div class="flex items-center justify-between">' +
+            '<div class="flex items-center gap-3">' +
+              '<i data-lucide="message-circle" class="w-5 h-5 text-[#25D366]"></i>' +
+              '<div>' +
+                '<p class="text-sm font-medium">WhatsApp</p>' +
+                '<p class="text-[10px] text-white/40">Hide icon from screen</p>' +
+              '</div>' +
+            '</div>' +
+            '<div class="flex gap-2">' +
+              '<button id="btnWaOff" class="px-3 py-1.5 rounded-lg bg-red-500/15 text-red-400 text-xs font-semibold active:scale-95">HIDE</button>' +
+              '<button id="btnWaOn" class="px-3 py-1.5 rounded-lg bg-green-500/15 text-green-400 text-xs font-semibold active:scale-95">SHOW</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+
+        // Notice
+        '<button id="btnNotice" class="w-full glass-2 ripple py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2">' +
+          '<i data-lucide="bell" class="w-4 h-4 text-[#ff6b35]"></i> Send Notice' +
+        '</button>' +
+
+      '</div>' +
+
+      // Payment history section
+      '<div class="glass p-5">' +
+        '<div class="flex items-center justify-between mb-3">' +
+          '<p class="text-xs text-white/40 uppercase tracking-wider">Payment History</p>' +
+          '<span class="badge badge-gray">' + payments.length + '</span>' +
+        '</div>' +
+        (payments.length === 0
+          ? '<div class="text-center py-6"><i data-lucide="receipt" class="w-10 h-10 mx-auto text-white/20 mb-2"></i><p class="text-xs text-white/40">Koi payment abhi tak nahi</p></div>'
+          : payments.slice(0, 5).map(function(p) {
+              return '<div class="flex items-center justify-between py-3 border-b border-white/5 last:border-0">' +
+                '<div class="flex items-center gap-3 min-w-0">' +
+                  '<div class="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center flex-shrink-0">' +
+                    '<i data-lucide="check" class="w-4 h-4 text-green-400"></i>' +
+                  '</div>' +
+                  '<div class="min-w-0">' +
+                    '<p class="text-xs font-medium truncate">' + escapeHtml(p.method || 'Cash') + '</p>' +
+                    '<p class="text-[10px] text-white/40">' + fmtDateTime(p.created_at) + '</p>' +
+                  '</div>' +
+                '</div>' +
+                '<p class="text-sm font-bold text-green-400 flex-shrink-0">+' + fmtPKR(p.amount) + '</p>' +
+              '</div>';
+            }).join('')
+        ) +
+      '</div>' +
+
+    '</div>';
+
+    icons();
+
+    // ═══ EVENT LISTENERS ═══
+
+    // Back
+    const backBtn = $('backToDev');
+    if (backBtn) backBtn.addEventListener('click', function() { renderDevices(c); });
+
+    // Lock
+    const btnLock = $('btnLock');
+    if (btnLock) btnLock.addEventListener('click', function() {
+      sendDeviceCommand(device, 'LOCK', {
+        shop_name: State.business.name || '',
+        phone: State.business.phone || '',
+        address: State.business.address || '',
+        due_amount: remaining,
+        due_date: nextDueDate
+      });
+    });
+
+    // Unlock
+    const btnUnlock = $('btnUnlock');
+    if (btnUnlock) btnUnlock.addEventListener('click', function() {
+      sendDeviceCommand(device, 'UNLOCK', {});
+    });
+
+    // Camera OFF
+    const btnCamOff = $('btnCamOff');
+    if (btnCamOff) btnCamOff.addEventListener('click', function() {
+      sendDeviceCommand(device, 'CAMERA_DISABLE', {});
+    });
+
+    // Camera ON
+    const btnCamOn = $('btnCamOn');
+    if (btnCamOn) btnCamOn.addEventListener('click', function() {
+      sendDeviceCommand(device, 'CAMERA_ENABLE', {});
+    });
+
+    // WhatsApp Hide
+    const btnWaOff = $('btnWaOff');
+    if (btnWaOff) btnWaOff.addEventListener('click', function() {
+      sendDeviceCommand(device, 'WHATSAPP_DISABLE', {});
+    });
+
+    // WhatsApp Show
+    const btnWaOn = $('btnWaOn');
+    if (btnWaOn) btnWaOn.addEventListener('click', function() {
+      sendDeviceCommand(device, 'WHATSAPP_ENABLE', {});
+    });
+
+    // Notice
+    const btnNotice = $('btnNotice');
+    if (btnNotice) btnNotice.addEventListener('click', function() {
+      openSendNoticeModal(device);
+    });
+
+  } catch (err) {
+    console.error('openDeviceDetail error', err);
+    c.innerHTML = '<div class="glass p-6 text-center"><i data-lucide="alert-circle" class="w-10 h-10 mx-auto text-red-400 mb-2"></i><p class="text-sm text-red-400">Device detail load nahi hua</p><p class="text-xs text-white/40 mt-2">' + escapeHtml(err.message || '') + '</p><button onclick="renderDevices(document.getElementById(\'pageContainer\'))" class="btn-grad mt-4 px-4 py-2 rounded-xl text-sm">Back</button></div>';
+    icons();
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   SEND DEVICE COMMAND — Supabase mein INSERT
+═══════════════════════════════════════════════════ */
+async function sendDeviceCommand(device, commandType, payload) {
+  try {
+    // Insert into device_commands table
+    const cmdData = {
+      device_id: device.id,
+      business_id: State.businessId,
+      command_type: commandType,
+      payload: JSON.stringify(payload || {}),
+      status: 'pending',
+      created_at: new Date().toISOString()
+    };
+
+    const res = await sb.from('device_commands').insert(cmdData);
+
+    if (res.error) {
+      // If device_commands table doesn't exist, show helpful message
+      if (res.error.message && res.error.message.indexOf('device_commands') !== -1) {
+        toast('device_commands table missing — Supabase mein banayein', 'err');
+        console.error('device_commands table needed:', res.error);
+      } else {
+        throw res.error;
+      }
+      return;
+    }
+
+    toast('Command bheja gaya: ' + commandType, 'ok');
+    console.log('[command sent]', commandType, payload);
+
+  } catch (err) {
+    console.error('sendDeviceCommand error', err);
+    toast('Command fail: ' + (err.message || 'Unknown'), 'err');
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   SEND NOTICE MODAL
+═══════════════════════════════════════════════════ */
+function openSendNoticeModal(device) {
+  const html = '<div class="modal-overlay" id="noticeModal"><div class="modal-sheet">' +
+    '<div class="sticky top-0 bg-[#14141c] z-10 px-5 pt-5 pb-3 border-b border-white/5">' +
+      '<div class="flex items-center justify-between">' +
+        '<div><h3 class="text-lg font-bold">Send Notice</h3><p class="text-xs text-white/40">Customer ko message bhejein</p></div>' +
+        '<button id="closeNotice" class="w-9 h-9 glass-2 rounded-xl flex items-center justify-center active:scale-95"><i data-lucide="x" class="w-4 h-4"></i></button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="p-5 space-y-4 pb-8">' +
+      '<div>' +
+        '<label class="text-xs text-white/50 mb-2 block font-medium">Notice Message *</label>' +
+        '<textarea id="noticeMsg" class="inp" rows="4" placeholder="Apni qist ada karein...">Assalam-o-Alaikum, aap ki qist ki tareekh qareeb hai. Baraye meharbani waqt par adaigi karein.</textarea>' +
+      '</div>' +
+      '<div>' +
+        '<label class="text-xs text-white/50 mb-2 block font-medium">Style</label>' +
+        '<select id="noticeStyle" class="inp">' +
+          '<option value="banner">Banner (top)</option>' +
+          '<option value="popup">Popup (center)</option>' +
+          '<option value="fullscreen">Fullscreen</option>' +
+        '</select>' +
+      '</div>' +
+      '<p id="noticeError" class="hidden text-xs text-red-400 text-center px-2 py-2 rounded-lg bg-red-500/10 border border-red-500/20"></p>' +
+      '<button id="sendNoticeBtn" class="btn-grad ripple w-full py-3.5 rounded-2xl font-semibold">Send Notice</button>' +
+    '</div>' +
+  '</div></div>';
+
+  $('modalRoot').innerHTML = html;
   icons();
-  const backBtn = $('backToDev');
-  if (backBtn) backBtn.addEventListener('click', function() { renderDevices(c); });
+
+  const modal = $('noticeModal');
+  setTimeout(function() { modal.classList.add('show'); }, 10);
+  const close = function() { modal.classList.remove('show'); setTimeout(function() { $('modalRoot').innerHTML = ''; }, 300); };
+  $('closeNotice').addEventListener('click', close);
+  modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
+
+  $('sendNoticeBtn').addEventListener('click', function() {
+    const msg = $('noticeMsg').value.trim();
+    const style = $('noticeStyle').value;
+    if (!msg) {
+      $('noticeError').textContent = 'Message zaroori hai';
+      $('noticeError').classList.remove('hidden');
+      return;
+    }
+    sendDeviceCommand(device, 'NOTICE', { message: msg, style: style });
+    close();
+  });
 }
 
 function renderPayments(c) {
