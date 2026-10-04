@@ -1534,7 +1534,17 @@ function openQrEnrollModal(device) {
     });
   }
 
-  generateQr(qrData);
+  // QR code — library load hone ke baad generate karein
+setTimeout(function() {
+  if (typeof QRCode !== 'undefined') {
+    generateQr(qrData);
+  } else {
+    console.error('QRCode library not loaded');
+    setTimeout(function() {
+      if (typeof QRCode !== 'undefined') generateQr(qrData);
+    }, 1000);
+  }
+}, 100);
 
   let secondsLeft = 300;
   function updateTimer() {
