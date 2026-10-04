@@ -1407,6 +1407,21 @@ const genQrBtn = $('genQrBtn');
 if (genQrBtn) genQrBtn.addEventListener('click', function() {
   openQrEnrollModal(device);
 });
+   // Delete Device
+const deleteDeviceBtn = $('deleteDeviceBtn');
+if (deleteDeviceBtn) deleteDeviceBtn.addEventListener('click', async function() {
+  if (!confirm('Kya aap waqai ye device delete karna chahte hain?\n\nDevice: ' + (device.brand || '') + ' ' + (device.model || '') + '\nIMEI: ' + (device.imei || ''))) return;
+  try {
+    const del = await sb.from('devices').delete().eq('id', device.id).eq('business_id', State.businessId);
+    if (del.error) throw del.error;
+    await sb.from('emi_plans').delete().eq('device_id', device.id);
+    toast('Device delete ho gaya', 'ok');
+    renderDevices(c);
+  } catch (err) {
+    console.error('delete device error', err);
+    toast('Delete fail: ' + (err.message || 'Unknown'), 'err');
+  }
+});
   } catch (err) {
     console.error('openDeviceDetail error', err);
     c.innerHTML = '<div class="glass p-6 text-center"><i data-lucide="alert-circle" class="w-10 h-10 mx-auto text-red-400 mb-2"></i><p class="text-sm text-red-400">Device detail load nahi hua</p><p class="text-xs text-white/40 mt-2">' + escapeHtml(err.message || '') + '</p><button onclick="renderDevices(document.getElementById(\'pageContainer\'))" class="btn-grad mt-4 px-4 py-2 rounded-xl text-sm">Back</button></div>';
