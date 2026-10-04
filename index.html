@@ -1344,26 +1344,23 @@ async function openDeviceDetail(parentContainer, deviceId) {
 ═══════════════════════════════════════════════════ */
 async function sendDeviceCommand(device, commandType, payload) {
   try {
-    // Insert into device_commands table
     const cmdData = {
       device_id: device.id,
       business_id: State.businessId,
       command_type: commandType,
-      payload: JSON.stringify(payload || {}),
-      status: 'pending',
-      created_at: new Date().toISOString()
+      payload: payload || {},
+      status: 'pending'
     };
 
-    const res = await sb.from('device_commands').insert(cmdData);
+    console.log('[command] sending', cmdData);
+
+    const res = await sb.from('device_commands').insert(cmdData).select();
+
+    console.log('[command] result', res);
 
     if (res.error) {
-      // If device_commands table doesn't exist, show helpful message
-      if (res.error.message && res.error.message.indexOf('device_commands') !== -1) {
-        toast('device_commands table missing — Supabase mein banayein', 'err');
-        console.error('device_commands table needed:', res.error);
-      } else {
-        throw res.error;
-      }
+      console.error('insert error:', res.error);
+      toast('Error: ' + (res.error.message || 'Unknown insert error'), 'err');
       return;
     }
 
@@ -1371,11 +1368,10 @@ async function sendDeviceCommand(device, commandType, payload) {
     console.log('[command sent]', commandType, payload);
 
   } catch (err) {
-    console.error('sendDeviceCommand error', err);
-    toast('Command fail: ' + (err.message || 'Unknown'), 'err');
+    console.error('sendDeviceCommand exception', err);
+    toast('Exception: ' + (err.message || 'Unknown'), 'err');
   }
 }
-
 /* ═══════════════════════════════════════════════════
    SEND NOTICE MODAL
 ═══════════════════════════════════════════════════ */
