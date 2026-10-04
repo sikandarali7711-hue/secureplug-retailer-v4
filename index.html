@@ -1537,17 +1537,46 @@ function openQrEnrollModal(device) {
   $('closeQrModal').addEventListener('click', close);
   modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
 
-  function generateQr(data) {
-    const canvas = $('qrCanvas');
-    if (!canvas || typeof QRCode === 'undefined') return;
+function generateQr(data) {
+  const canvas = $('qrCanvas');
+  if (!canvas) {
+    console.error('QR canvas not found');
+    return;
+  }
+  if (typeof QRCode === 'undefined') {
+    console.error('QRCode library not loaded — retrying...');
+    setTimeout(function() { generateQr(data); }, 500);
+    return;
+  }
+  try {
     QRCode.toCanvas(canvas, data, {
       width: 220,
       margin: 1,
       color: { dark: '#0a0a0f', light: '#ffffff' }
     }, function(err) {
-      if (err) console.error('QR error', err);
+      if (err) {
+        console.error('QR error', err);
+      } else {
+        console.log('QR generated OK');
+      }
     });
+  } catch (e) {
+    console.error('QR exception', e);
+    try {
+      QRCode.toDataURL(data, { width: 220, margin: 1 }, function(err, url) {
+        if (err) return;
+        const img = document.createElement('img');
+        img.src = url;
+        img.style.width = '220px';
+        img.style.height = '220px';
+        canvas.parentNode.innerHTML = '';
+        canvas.parentNode.appendChild(img);
+      });
+    } catch (e2) {
+      console.error('QR fallback failed', e2);
+    }
   }
+}
 
   // QR code — library load hone ke baad generate karein
 setTimeout(function() {
