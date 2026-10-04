@@ -1538,7 +1538,31 @@ function openQrEnrollModal(device) {
   modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
 
 function generateQr(data) {
-  console.log('QR generation disabled — will fix after DPC app');
+  const container = $('qrContainer');
+  if (!container) {
+    console.error('QR container not found');
+    return;
+  }
+  if (typeof QRCode === 'undefined') {
+    console.error('QRCode library not loaded');
+    container.innerHTML = '<p style="color:#fff;font-size:12px;padding:20px;">QR library load nahi hui</p>';
+    return;
+  }
+  try {
+    container.innerHTML = '';
+    new QRCode(container, {
+      text: data,
+      width: 220,
+      height: 220,
+      colorDark: '#0a0a0f',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+    console.log('QR generated via qrcodejs');
+  } catch (e) {
+    console.error('QR generation failed', e);
+    container.innerHTML = '<p style="color:#fff;font-size:12px;padding:20px;">QR error: ' + e.message + '</p>';
+  }
 }
   // QR code — library load hone ke baad generate karein
 setTimeout(function() {
