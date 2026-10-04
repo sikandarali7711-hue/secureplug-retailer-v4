@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#ff6b35" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="SecurePlug" />
+<title>SecurePlug Retailer</title>
+
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<style>
+  * { font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+  html, body { background: #0a0a0f; color: #fff; overscroll-behavior-y: none; margin: 0; padding: 0; }
+  body { min-height: 100vh; min-height: 100dvh; }
+
+  .mesh-bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .mesh-blob { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.32; }
+  .blob1 { width: 420px; height: 420px; background: #ff6b35; top: -140px; left: -140px; animation: float1 15s ease-in-out infinite; }
+  .blob2 { width: 380px; height: 380px; background: #ea580c; bottom: -120px; right: -120px; animation: float2 18s ease-in-out infinite; }
+  .blob3 { width: 300px; height: 300px; background: #8b5cf6; top: 45%; left: 55%; opacity: 0.18; animation: float3 20s ease-in-out infinite; }
+  @keyframes float1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(70px,50px) scale(1.15); } }
+  @keyframes float2 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-60px,-40px) scale(1.12); } }
+  @keyframes float3 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-40px,60px) scale(1.2); } }
+
+  .glass {
+    background: rgba(255,255,255,0.045);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+  }
+  .glass-2 {
+    background: rgba(255,255,255,0.07);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 16px;
+  }
+
+  .btn-grad {
+    background: linear-gradient(135deg, #ff6b35 0%, #ea580c 100%);
+    box-shadow: 0 10px 28px -10px rgba(255,107,53,0.7);
+    transition: transform .15s, box-shadow .15s, opacity .15s;
+  }
+  .btn-grad:active { transform: scale(0.97); }
+  .btn-grad:disabled { opacity: 0.55; pointer-events: none; }
+
+  .ripple { position: relative; overflow: hidden; }
+  .ripple::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(circle at var(--rx,50%) var(--ry,50%), rgba(255,255,255,0.35), transparent 40%);
+    opacity: 0; transition: opacity .5s;
+  }
+  .ripple:active::after { opacity: 1; transition: opacity 0s; }
+
+  .inp {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: #fff; border-radius: 14px;
+    padding: 14px 16px; width: 100%;
+    outline: none; font-size: 15px;
+    transition: border-color .2s, background .2s;
+  }
+  .inp::placeholder { color: rgba(255,255,255,0.35); }
+  .inp:focus { border-color: rgba(255,107,53,0.75); background: rgba(255,255,255,0.07); }
+  .inp:disabled { opacity: 0.5; }
+  select.inp { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; background-size: 16px; padding-right: 40px; }
+  select.inp option { background: #14141c; color: #fff; }
+
+  .fade-in { animation: fadeIn .5s ease both; }
+  .fade-up { animation: fadeUp .55s cubic-bezier(.2,.9,.3,1) both; }
+  .sheet-in { animation: sheetIn .3s cubic-bezier(.2,.9,.3,1.15) both; }
+  .scale-in { animation: scaleIn .28s cubic-bezier(.2,.9,.3,1.3) both; }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes sheetIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes scaleIn { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(255,107,53,0.6); } 70% { box-shadow: 0 0 0 14px rgba(255,107,53,0); } 100% { box-shadow: 0 0 0 0 rgba(255,107,53,0); } }
+  @keyframes confetti-fall {
+    0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+  }
+  .spin { animation: spin 1s linear infinite; }
+  .pulse-ring { animation: pulse-ring 2s infinite; }
+
+  .bnav-item { color: rgba(255,255,255,0.5); transition: color .25s; }
+  .bnav-item.active { color: #ff6b35; }
+  .bnav-icon { border-radius: 12px; padding: 6px; transition: all .3s; display: inline-flex; }
+  .bnav-item.active .bnav-icon {
+    background: linear-gradient(135deg, #ff6b35, #ea580c);
+    color: #fff;
+    box-shadow: 0 6px 20px -6px rgba(255,107,53,0.9);
+  }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 100px;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(20,20,28,0.97);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #fff; padding: 12px 20px; border-radius: 14px;
+    font-size: 14px; opacity: 0; transition: all .3s;
+    z-index: 400; max-width: 90vw; text-align: center;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.ok { border-color: rgba(34,197,94,0.6); }
+  #toast.err { border-color: rgba(239,68,68,0.6); }
+
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 300;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(6px);
+    display: flex; align-items: flex-end; justify-content: center;
+    padding: 0; opacity: 0; pointer-events: none; transition: opacity .25s;
+  }
+  .modal-overlay.show { opacity: 1; pointer-events: auto; }
+  .modal-sheet {
+    width: 100%; max-width: 560px;
+    background: #14141c;
+    border-top-left-radius: 24px; border-top-right-radius: 24px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    max-height: 92vh; overflow-y: auto;
+    transform: translateY(30px); transition: transform .3s cubic-bezier(.2,.9,.3,1.15);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .modal-overlay.show .modal-sheet { transform: translateY(0); }
+
+  .skel {
+    background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.11) 50%, rgba(255,255,255,0.05) 75%);
+    background-size: 200% 100%;
+    animation: skelAnim 1.4s infinite; border-radius: 12px;
+  }
+  @keyframes skelAnim { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  .no-sb::-webkit-scrollbar { display: none; }
+  .no-sb { -ms-overflow-style: none; scrollbar-width: none; }
+  .safe-b { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-t { padding-top: env(safe-area-inset-top); }
+  .hscroll { overflow-x: auto; scroll-snap-type: x mandatory; }
+  .hscroll > * { scroll-snap-align: start; }
+  .chip { transition: all .2s; }
+  .chip.active { background: linear-gradient(135deg, #ff6b35, #ea580c); color: #fff; border-color: transparent; box-shadow: 0 6px 20px -8px rgba(255,107,53,0.8); }
+  .card-lift { transition: transform .2s; }
+  .card-lift:active { transform: scale(0.98); }
+  .divider { height: 1px; background: rgba(255,255,255,0.07); margin: 12px 0; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+  .badge-red { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+  .badge-orange { background: rgba(255,107,53,0.15); color: #ff8a5c; border: 1px solid rgba(255,107,53,0.3); }
+  .badge-gray { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.12); }
+</style>
+</head>
+<body>
+
+<div class="mesh-bg">
+  <div class="mesh-blob blob1"></div>
+  <div class="mesh-blob blob2"></div>
+  <div class="mesh-blob blob3"></div>
+</div>
+
+<div id="splash" class="fixed inset-0 z-[500] flex items-center justify-center bg-[#0a0a0f]">
+  <div class="text-center fade-in">
+    <div class="w-20 h-20 mx-auto rounded-3xl btn-grad flex items-center justify-center mb-4 pulse-ring">
+      <i data-lucide="shield-check" class="w-10 h-10 text-white"></i>
+    </div>
+    <h1 class="text-2xl font-extrabold tracking-tight">SecurePlug</h1>
+    <p class="text-xs text-white/40 mt-1">Retailer Portal</p>
+    <div class="mt-6 flex justify-center">
+      <div class="w-6 h-6 border-2 border-white/20 border-t-[#ff6b35] rounded-full spin"></div>
+    </div>
+  </div>
+</div>
+
+<div id="loginScreen" class="hidden fixed inset-0 z-40 flex items-center justify-center px-5 overflow-y-auto">
+  <div class="w-full max-w-sm fade-up py-8">
+    <div class="text-center mb-8">
+      <div class="w-16 h-16 mx-auto rounded-3xl btn-grad flex items-center justify-center mb-3">
+        <i data-lucide="shield-check" class="w-8 h-8 text-white"></i>
+      </div>
+      <h1 class="text-2xl font-bold">Retailer Login</h1>
+      <p class="text-sm text-white/40 mt-1">Apne SecurePlug account se login karein</p>
+    </div>
+
+    <form id="loginForm" class="glass p-6 space-y-4" novalidate>
+      <div>
+        <label class="text-xs text-white/50 mb-2 block font-medium">Email</label>
+        <input id="email" type="email" class="inp" placeholder="you@example.com" autocomplete="email" inputmode="email" required />
+      </div>
+      <div>
+        <label class="text-xs text-white/50 mb-2 block font-medium">Password</label>
+        <div class="relative">
+          <input id="password" type="password" class="inp pr-12" placeholder="••••••••" autocomplete="current-password" required />
+          <button type="button" id="togglePw" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 p-2 active:scale-90">
+            <i data-lucide="eye" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <button id="loginBtn" type="submit" class="btn-grad ripple w-full py-3.5 rounded-2xl font-semibold text-white flex items-center justify-center gap-2">
+        <span id="loginBtnText">Login</span>
+        <i id="loginBtnIcon" data-lucide="arrow-right" class="w-5 h-5"></i>
+      </button>
+
+      <p id="loginError" class="hidden text-xs text-red-400 text-center px-2 py-2 rounded-lg bg-red-500/10 border border-red-500/20"></p>
+    </form>
+
+    <p class="text-center text-xs text-white/30 mt-6">
+      Powered by SecurePlug · v4.0
+    </p>
+  </div>
+</div>
+
+<div id="app" class="hidden relative z-10 min-h-screen pb-28">
+
+  <header class="sticky top-0 z-30 backdrop-blur-xl bg-[#0a0a0f]/70 border-b border-white/5 safe-t">
+    <div class="flex items-center justify-between px-5 py-3.5">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-2xl btn-grad flex items-center justify-center flex-shrink-0">
+          <i data-lucide="shield-check" class="w-5 h-5 text-white"></i>
+        </div>
+        <div class="min-w-0">
+          <p class="text-[10px] text-white/40 leading-none">Retailer</p>
+          <h2 id="bizName" class="text-sm font-semibold leading-tight truncate">—</h2>
+        </div>
+      </div>
+      <button id="refreshBtn" class="w-10 h-10 glass-2 flex items-center justify-center active:scale-95 flex-shrink-0">
+        <i data-lucide="refresh-cw" class="w-4 h-4 text-white/70"></i>
+      </button>
+    </div>
+  </header>
+
+  <main id="pageContainer" class="px-5 pt-5 max-w-2xl mx-auto">
+  </main>
+
+  <nav class="fixed bottom-0 left-0 right-0 z-30 backdrop-blur-xl bg-[#0a0a0f]/90 border-t border-white/5 safe-b">
+    <div class="grid grid-cols-5 max-w-2xl mx-auto py-2">
+      <button class="bnav-item active flex flex-col items-center gap-0.5 py-1.5 ripple" data-page="home">
+        <span class="bnav-icon"><i data-lucide="home" class="w-5 h-5"></i></span>
+        <span class="text-[10px] font-medium">Home</span>
+      </button>
+      <button class="bnav-item flex flex-col items-center gap-0.5 py-1.5 ripple" data-page="customers">
+        <span class="bnav-icon"><i data-lucide="users" class="w-5 h-5"></i></span>
+        <span class="text-[10px] font-medium">Customers</span>
+      </button>
+      <button class="bnav-item flex flex-col items-center gap-0.5 py-1.5 ripple" data-page="devices">
+        <span class="bnav-icon"><i data-lucide="smartphone" class="w-5 h-5"></i></span>
+        <span class="text-[10px] font-medium">Devices</span>
+      </button>
+      <button class="bnav-item flex flex-col items-center gap-0.5 py-1.5 ripple" data-page="payments">
+        <span class="bnav-icon"><i data-lucide="wallet" class="w-5 h-5"></i></span>
+        <span class="text-[10px] font-medium">Payments</span>
+      </button>
+      <button class="bnav-item flex flex-col items-center gap-0.5 py-1.5 ripple" data-page="settings">
+        <span class="bnav-icon"><i data-lucide="settings" class="w-5 h-5"></i></span>
+        <span class="text-[10px] font-medium">Settings</span>
+      </button>
+    </div>
+  </nav>
+</div>
+
+<div id="toast"></div>
+
+<div id="modalRoot"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   CONFIG — SECUREPLUG RETAILER
+═══════════════════════════════════════════════════ */
+const SUPABASE_URL = "https://rmqqhbcvvuojvlefuzjd.supabase.co";
+const SUPABASE_KEY = "sb_publishable_9yaDkS_CNmZyFsbjFl3U_Q_0J24yWgm";
+
+/* ═══════════════════════════════════════════════════
+   SUPABASE CLIENT
+═══════════════════════════════════════════════════ */
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+    storageKey: 'secureplug-retailer-auth-v4'
+  }
+});
+
+/* ═══════════════════════════════════════════════════
+   GLOBAL STATE
+═══════════════════════════════════════════════════ */
+const State = {
+  session: null,
+  business: null,
+  page: 'home',
+  businessId: null,
+  cache: {
+    customers: null,
+    devices: null,
+    payments: null
+  }
+};
+
+/* ═══════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════ */
+const $  = (id) => document.getElementById(id);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+function icons() { try { lucide.createIcons(); } catch(e){ console.warn('lucide err', e); } }
+
+let toastTimer;
+function toast(msg, type = '') {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 2800);
+}
+
+function show(el) { el.classList.remove('hidden'); }
+function hide(el) { el.classList.add('hidden'); }
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function fmtPKR(n) {
+  const num = Number(n || 0);
+  return 'Rs ' + num.toLocaleString('en-PK');
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt)) return '—';
+  return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function fmtDateTime(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt)) return '—';
+  return dt.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function timeAgo(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt)) return '—';
+  const sec = Math.floor((Date.now() - dt.getTime()) / 1000);
+  if (sec < 60) return 'just now';
+  if (sec < 3600) return Math.floor(sec/60) + 'm ago';
+  if (sec < 86400) return Math.floor(sec/3600) + 'h ago';
+  return Math.floor(sec/86400) + 'd ago';
+}
+
+document.addEventListener('pointerdown', (e) => {
+  const el = e.target.closest('.ripple');
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  el.style.setProperty('--rx', ((e.clientX - r.left) / r.width * 100) + '%');
+  el.style.setProperty('--ry', ((e.clientY - r.top) / r.height * 100) + '%');
+});
+
+function countUp(el, target, duration = 800) {
+  const start = 0;
+  const startTime = performance.now();
+  const step = (t) => {
+    const p = Math.min((t - startTime) / duration, 1);
+    const val = Math.floor(start + (target - start) * (1 - Math.pow(1 - p, 3)));
+    el.textContent = val.toLocaleString('en-PK');
+    if (p < 1) requestAnimationFrame(step);
+    else el.textContent = target.toLocaleString('en-PK');
+  };
+  requestAnimationFrame(step);
+}
+
+function confetti() {
+  const colors = ['#ff6b35','#ea580c','#22c55e','#8b5cf6','#fbbf24'];
+  for (let i = 0; i < 40; i++) {
+    const c = document.createElement('div');
+    c.style.cssText = `
+      position: fixed; top: 0; left: ${Math.random()*100}vw;
+      width: 8px; height: 12px; background: ${colors[i%colors.length]};
+      border-radius: 2px; z-index: 500; pointer-events: none;
+      animation: confetti-fall ${1.5 + Math.random()*1.5}s linear forwards;
+      animation-delay: ${Math.random()*0.3}s;
+    `;
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 3200);
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   AUTH FLOW
+═══════════════════════════════════════════════════ */
+async function initAuth() {
+  try {
+    const { data: { session }, error } = await sb.auth.getSession();
+    if (error) console.warn('getSession error', error);
+
+    if (session) {
+      await handleLoggedIn(session);
+    } else {
+      showLogin();
+    }
+  } catch (e) {
+    console.error('initAuth crash', e);
+    showLogin();
+  }
+
+  sb.auth.onAuthStateChange(async (event, session) => {
+    console.log('[auth]', event);
+    if (event === 'SIGNED_IN' && session) {
+      if (!State.business) await handleLoggedIn(session);
+    } else if (event === 'SIGNED_OUT') {
+      State.session = null;
+      State.business = null;
+      State.businessId = null;
+      State.cache = { customers: null, devices: null, payments: null };
+      showLogin();
+    } else if (event === 'TOKEN_REFRESHED' && session) {
+      State.session = session;
+    }
+  });
+}
+
+async function handleLoggedIn(session) {
+  State.session = session;
+
+  let biz = null;
+
+  // PRIMARY: businesses.auth_user_id = auth.uid()
+  const { data: bizPrimary, error: e1 } = await sb
+    .from('businesses')
+    .select('*')
+    .eq('auth_user_id', session.user.id)
+    .maybeSingle();
+
+  if (e1) console.warn('biz primary err', e1);
+  if (bizPrimary) biz = bizPrimary;
+
+  // FALLBACK: profiles.business_id
+  if (!biz) {
+    const { data: prof, error: e2 } = await sb
+      .from('profiles')
+      .select('business_id')
+      .eq('id', session.user.id)
+      .maybeSingle();
+
+    if (e2) console.warn('profile err', e2);
+
+    if (prof?.business_id) {
+      const { data: bizFb, error: e3 } = await sb
+        .from('businesses')
+        .select('*')
+        .eq('id', prof.business_id)
+        .maybeSingle();
+      if (e3) console.warn('biz fallback err', e3);
+      biz = bizFb;
+    }
+  }
+
+  if (!biz) {
+    toast('Business record nahi mila. Admin se rabta karein.', 'err');
+    await sb.auth.signOut();
+    showLogin();
+    return;
+  }
+
+  if (biz.is_active === false) {
+    toast('Aapka account suspended hai. Admin se rabta karein.', 'err');
+    await sb.auth.signOut();
+    showLogin();
+    return;
+  }
+
+  State.business = biz;
+  State.businessId = biz.id;
+  try { localStorage.setItem('secureplug_business_id', biz.id); } catch(e){}
+
+  showApp();
+}
+
+function showLogin() {
+  hide($('splash'));
+  hide($('app'));
+  show($('loginScreen'));
+  icons();
+}
+
+function showApp() {
+  hide($('splash'));
+  hide($('loginScreen'));
+  show($('app'));
+  $('bizName').textContent = State.business?.name || 'Retailer';
+  renderPage(State.page);
+  icons();
+}
+
+/* ═══════════════════════════════════════════════════
+   LOGIN FORM
+═══════════════════════════════════════════════════ */
+$('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('email').value.trim();
+  const password = $('password').value;
+  const errEl = $('loginError');
+  errEl.classList.add('hidden');
+
+  if (!email || !password) {
+    errEl.textContent = 'Email aur password dono likhein.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const btn = $('loginBtn');
+  const btnTxt = $('loginBtnText');
+  const btnIcon = $('loginBtnIcon');
+  btn.disabled = true;
+  btnTxt.textContent = 'Logging in...';
+  btnIcon.classList.add('spin');
+
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      errEl.textContent = error.message || 'Login failed.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+
+    if (data.session) {
+      await handleLoggedIn(data.session);
+      $('password').value = '';
+    }
+  } catch (e) {
+    errEl.textContent = e.message || 'Network error.';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btnTxt.textContent = 'Login';
+    btnIcon.classList.remove('spin');
+  }
+});
+
+$('togglePw').addEventListener('click', () => {
+  const p = $('password');
+  p.type = p.type === 'password' ? 'text' : 'password';
+});
+
+/* ═══════════════════════════════════════════════════
+   NAVIGATION
+═══════════════════════════════════════════════════ */
+$$('.bnav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const page = btn.dataset.page;
+    if (State.page === page) return;
+    State.page = page;
+    $$('.bnav-item').forEach(b => b.classList.toggle('active', b.dataset.page === page));
+    renderPage(page);
+  });
+});
+
+/* ═══════════════════════════════════════════════════
+   ROUTER
+═══════════════════════════════════════════════════ */
+function renderPage(page) {
+  const c = $('pageContainer');
+  c.innerHTML = '';
+  switch (page) {
+    case 'home':      return renderHome(c);
+    case 'customers': return renderCustomers(c);
+    case 'devices':   return renderDevices(c);
+    case 'payments':  return renderPayments(c);
+    case 'settings':  return renderSettings(c);
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   PAGE PLACEHOLDERS (Part 2-5 will replace)
+═══════════════════════════════════════════════════ */
+function renderHome(c) {
+  c.innerHTML = `
+    <div class="fade-up space-y-4">
+      <div class="glass p-6 text-center">
+        <p class="text-3xl font-extrabold text-[#ff6b35]">Welcome</p>
+        <p class="text-sm text-white/60 mt-2">Dashboard Part 2 mein aayega</p>
+      </div>
+    </div>`;
+  icons();
+}
+function renderCustomers(c) {
+  c.innerHTML = `
+    <div class="fade-up glass p-6 text-center">
+      <p class="text-sm text-white/60">Customers page Part 3 mein aayega</p>
+    </div>`;
+  icons();
+}
+function renderDevices(c) {
+  c.innerHTML = `
+    <div class="fade-up glass p-6 text-center">
+      <p class="text-sm text-white/60">Devices page Part 4 mein aayega</p>
+    </div>`;
+  icons();
+}
+function renderPayments(c) {
+  c.innerHTML = `
+    <div class="fade-up glass p-6 text-center">
+      <p class="text-sm text-white/60">Payments page Part 5 mein aayega</p>
+    </div>`;
+  icons();
+}
+function renderSettings(c) {
+  c.innerHTML = `
+    <div class="fade-up space-y-4">
+      <div class="glass p-6">
+        <p class="text-xs text-white/50 mb-1">Shop</p>
+        <p class="font-semibold">${escapeHtml(State.business?.name || '—')}</p>
+        <p class="text-xs text-white/50 mt-2">${escapeHtml(State.business?.email || '')}</p>
+      </div>
+      <button id="logoutBtn" class="w-full glass-2 py-3.5 rounded-2xl text-red-400 font-medium flex items-center justify-center gap-2 active:scale-95 ripple">
+        <i data-lucide="log-out" class="w-4 h-4"></i> Logout
+      </button>
+    </div>`;
+
+  setTimeout(() => {
+    $('logoutBtn')?.addEventListener('click', async () => {
+      await sb.auth.signOut();
+      toast('Logged out', 'ok');
+    });
+  }, 0);
+
+  icons();
+}
+
+/* ═══════════════════════════════════════════════════
+   REFRESH
+═══════════════════════════════════════════════════ */
+$('refreshBtn').addEventListener('click', async () => {
+  const ic = $('refreshBtn').querySelector('i');
+  ic.classList.add('spin');
+  State.cache = { customers: null, devices: null, payments: null };
+  await renderPage(State.page);
+  setTimeout(() => {
+    ic.classList.remove('spin');
+    toast('Refreshed', 'ok');
+  }, 400);
+});
+
+/* ═══════════════════════════════════════════════════
+   SERVICE WORKER
+═══════════════════════════════════════════════════ */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW reg err', e));
+  });
+}
+
+/* ═══════════════════════════════════════════════════
+   BOOT
+═══════════════════════════════════════════════════ */
+window.addEventListener('DOMContentLoaded', () => {
+  icons();
+  setTimeout(initAuth, 400);
+});
+</script>
+
+</body>
+</html>
