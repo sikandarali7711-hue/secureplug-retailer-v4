@@ -1482,9 +1482,234 @@ function openSendNoticeModal(device) {
   });
 }
 
-function renderPayments(c) {
-  c.innerHTML = '<div class="fade-up glass p-6 text-center"><i data-lucide="wallet" class="w-12 h-12 mx-auto text-white/20 mb-3"></i><p class="text-sm text-white/60">Payments page next part mein aayega</p></div>';
+async function renderPayments(c) {
+  c.innerHTML = '<div class="fade-up space-y-4"><div class="skel h-24"></div><div class="skel h-32"></div><div class="skel h-24"></div></div>';
+
+  try {
+    const bid = State.businessId;
+    if (!bid) { c.innerHTML = '<div class="glass p-6 text-center text-red-400">Business ID missing</div>'; return; }
+
+    const results = await Promise.all([
+      sb.from('payments').select('*').eq('business_id', bid).order('created_at', { ascending: false }),
+      sb.from('devices').select('*').eq('business_id', bid),
+      sb.from('customers').select('id, name, phone').eq('business_id', bid)
+    ]);
+
+    const payments = results[0].data || [];
+    const devices = results[1].data || [];
+    const customers = results[2].data || [];
+
+    State.cache.payments = payments;
+    State.cache.devices = devices;
+    State.cache.customers = customers;
+
+    const totalCollected = payments.reduce(function(s, p) { return s + Number(p.amount || 0); }, 0);
+
+    const now = new Date();
+    const monthStr = now.toISOString().slice(0, 7);
+    const thisMonth = payments
+      .filter(function(p) { return (p.created_at || '').slice(0, 7) === monthStr; })
+      .reduce(function(s, p) { return s + Number(p.amount || 0); }, 0);
+
+    const todayStr = now.toISOString().slice(0, 10);
+    const today = payments
+      .filter(function(p) { return (p.created_at || '').slice(0, 10) === todayStr; })
+      .reduce(function(s, p) { return s + Number(p.amount || 0); }, 0);
+
+    let listHtml = '';
+    if (payments.length === 0) {
+      listHtml = '<div class="glass p-10 text-center"><i data-lucide="wallet" class="w-12 h-12 mx-auto text-white/20 mb-3"></i><p class="text-sm text-white/60 font-medium">Koi payment nahi abhi tak</p><p class="text-xs text-white/40 mt-1">Tap "Add Payment" to record</p></div>';
+    } else {
+      listHtml = payments.map(function(p) {
+        const dev = devices.find(function(d) { return d.id === p.device_id; });
+        const cust = customers.find(function(cu) { return cu.id === p.customer_id; });
+        const custName = cust ? cust.name : (dev ? (dev.brand + ' ' + (dev.model || '')) : 'Unknown');
+
+        return '<div class="glass p-4 card-lift">' +
+          '<div class="flex items-center gap-3">' +
+            '<div class="w-10 h-10 rounded-xl bg-green-500/15 flex items-center justify-center flex-shrink-0">' +
+              '<i data-lucide="check-circle-2" class="w-5 h-5 text-green-400"></i>' +
+            '</div>' +
+            '<div class="flex-1 min-w-0">' +
+              '<div class="flex items-center gap-2 flex-wrap">' +
+                '<p class="font-semibold text-sm truncate">' + escapeHtml(custName) + '</p>' +
+                '<span class="badge badge-green">' + escapeHtml(p.method || 'Cash') + '</span>' +
+              '</div>' +
+              '<p class="text-[10px] text-white/40 mt-0.5">' + fmtDateTime(p.created_at) + '</p>' +
+              (p.transaction_id ? '<p class="text-[10px] text-white/30 mt-0.5">TXN: ' + escapeHtml(p.transaction_id) + '</p>' : '') +
+            '</div>' +
+            '<p class="text-sm font-bold text-green-400 flex-shrink-0">+' + fmtPKR(p.amount) + '</p>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    c.innerHTML = '<div class="fade-up space-y-4">' +
+      '<div class="flex items-center justify-between">' +
+        '<div><h2 class="text-xl font-bold">Payments</h2><p class="text-xs text-white/40">' + payments.length + ' total</p></div>' +
+        '<button id="addPayBtn" class="btn-grad ripple px-4 py-2.5 rounded-2xl font-semibold text-sm flex items-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i> Add Payment</button>' +
+      '</div>' +
+      '<div class="glass p-5 relative overflow-hidden">' +
+        '<div class="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#22c55e]/30 to-transparent rounded-full blur-2xl"></div>' +
+        '<div class="relative">' +
+          '<p class="text-xs text-white/50">Total Collected</p>' +
+          '<p class="text-3xl font-extrabold mt-1 text-white">' + fmtPKR(totalCollected) + '</p>' +
+          '<div class="flex gap-4 mt-3 text-xs">' +
+            '<div><span class="text-white/40">This Month:</span> <span class="text-green-400 font-semibold">' + fmtPKR(thisMonth) + '</span></div>' +
+            '<div><span class="text-white/40">Today:</span> <span class="text-green-400 font-semibold">' + fmtPKR(today) + '</span></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="space-y-3">' + listHtml + '</div>' +
+    '</div>';
+
+    icons();
+
+    const addBtn = $('addPayBtn');
+    if (addBtn) addBtn.addEventListener('click', function() { openAddPaymentModal(c, devices, customers); });
+
+  } catch (err) {
+    console.error('renderPayments error', err);
+    c.innerHTML = '<div class="fade-up glass p-6 text-center"><i data-lucide="alert-circle" class="w-10 h-10 mx-auto text-red-400 mb-2"></i><p class="text-sm text-red-400">Payments load nahi ho paye</p><p class="text-xs text-white/40 mt-2">' + escapeHtml(err.message || 'Unknown error') + '</p></div>';
+    icons();
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   ADD PAYMENT MODAL
+═══════════════════════════════════════════════════ */
+function openAddPaymentModal(parentContainer, devices, customers) {
+  if (!devices || devices.length === 0) {
+    toast('Pehle device add karein', 'err');
+    return;
+  }
+
+  const devOptions = devices.map(function(d) {
+    const cust = customers.find(function(cu) { return cu.id === d.customer_id; });
+    const custName = cust ? cust.name : 'Unknown';
+    return '<option value="' + d.id + '">' + escapeHtml((d.brand || '') + ' ' + (d.model || 'Device')) + ' — ' + escapeHtml(custName) + '</option>';
+  }).join('');
+
+  const html = '<div class="modal-overlay" id="addPayModal"><div class="modal-sheet">' +
+    '<div class="sticky top-0 bg-[#14141c] z-10 px-5 pt-5 pb-3 border-b border-white/5">' +
+      '<div class="flex items-center justify-between">' +
+        '<div><h3 class="text-lg font-bold">Record Payment</h3><p class="text-xs text-white/40">Customer ki qist record karein</p></div>' +
+        '<button id="closeAddPay" class="w-9 h-9 glass-2 rounded-xl flex items-center justify-center active:scale-95"><i data-lucide="x" class="w-4 h-4"></i></button>' +
+      '</div>' +
+    '</div>' +
+    '<form id="addPayForm" class="p-5 space-y-4 pb-8" novalidate>' +
+      '<div>' +
+        '<label class="text-xs text-white/50 mb-2 block font-medium">Device *</label>' +
+        '<select name="device_id" class="inp" required>' + devOptions + '</select>' +
+      '</div>' +
+      '<div>' +
+        '<label class="text-xs text-white/50 mb-2 block font-medium">Amount (Rs) *</label>' +
+        '<input name="amount" class="inp" placeholder="3000" inputmode="numeric" required />' +
+      '</div>' +
+      '<div>' +
+        '<label class="text-xs text-white/50 mb-2 block font-medium">Payment Method *</label>' +
+        '<select name="method" class="inp" required>' +
+          '<option value="Cash">Cash</option>' +
+          '<option value="JazzCash">JazzCash</option>' +
+          '<option value="Easypaisa">Easypaisa</option>' +
+          '<option value="Bank Transfer">Bank Transfer</option>' +
+        '</select>' +
+      '</div>' +
+      '<div>' +
+        '<label class="text-xs text-white/50 mb-2 block font-medium">Transaction ID (optional)</label>' +
+        '<input name="transaction_id" class="inp" placeholder="TXN-12345" />' +
+      '</div>' +
+      '<div>' +
+        '<label class="text-xs text-white/50 mb-2 block font-medium">Notes (optional)</label>' +
+        '<textarea name="notes" class="inp" rows="2" placeholder="Koi note..."></textarea>' +
+      '</div>' +
+      '<p id="addPayError" class="hidden text-xs text-red-400 text-center px-2 py-2 rounded-lg bg-red-500/10 border border-red-500/20"></p>' +
+      '<button type="submit" id="savePayBtn" class="btn-grad ripple w-full py-3.5 rounded-2xl font-semibold flex items-center justify-center gap-2"><span id="savePayText">Save Payment</span></button>' +
+    '</form>' +
+  '</div></div>';
+
+  $('modalRoot').innerHTML = html;
   icons();
+
+  const modal = $('addPayModal');
+  setTimeout(function() { modal.classList.add('show'); }, 10);
+  const close = function() { modal.classList.remove('show'); setTimeout(function() { $('modalRoot').innerHTML = ''; }, 300); };
+  $('closeAddPay').addEventListener('click', close);
+  modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
+
+  $('addPayForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const errEl = $('addPayError');
+    errEl.classList.add('hidden');
+
+    const deviceId = form.device_id.value;
+    const amount = Number(form.amount.value || 0);
+    const method = form.method.value;
+    const txnId = form.transaction_id.value.trim() || null;
+    const notes = form.notes.value.trim() || null;
+
+    if (!deviceId || !amount || amount <= 0) {
+      errEl.textContent = 'Device aur sahi amount zaroori hai.';
+      errEl.classList.remove('hidden'); return;
+    }
+
+    const btn = $('savePayBtn'); const btnTxt = $('savePayText');
+    btn.disabled = true; btnTxt.textContent = 'Saving...';
+
+    try {
+      const dev = devices.find(function(d) { return d.id === deviceId; });
+      const customerId = dev ? dev.customer_id : null;
+
+      const payPayload = {
+        business_id: State.businessId,
+        device_id: deviceId,
+        customer_id: customerId,
+        amount: amount,
+        method: method,
+        transaction_id: txnId,
+        notes: notes,
+        created_at: new Date().toISOString()
+      };
+      const payRes = await sb.from('payments').insert(payPayload);
+      if (payRes.error) throw payRes.error;
+
+      const emiRes = await sb.from('emi_plans').select('*').eq('device_id', deviceId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (emiRes.data) {
+        const emi = emiRes.data;
+        const newPaidAmount = Number(emi.paid_amount || 0) + amount;
+        const newPaidMonths = Number(emi.paid_months || 0) + 1;
+        const total = Number(emi.total_amount || 0);
+        const down = Number(emi.down_payment || 0);
+        const newRemaining = Math.max(0, total - down - newPaidAmount);
+
+        const updateData = {
+          paid_amount: newPaidAmount,
+          paid_months: newPaidMonths,
+          remaining_amount: newRemaining
+        };
+
+        if (newRemaining <= 0) {
+          updateData.status = 'completed';
+          await sb.from('devices').update({ status: 'active' }).eq('id', deviceId);
+        }
+
+        await sb.from('emi_plans').update(updateData).eq('id', emi.id);
+      }
+
+      toast('Payment save ho gaya!', 'ok');
+      if (typeof confetti === 'function') confetti();
+      close();
+      renderPayments(parentContainer);
+
+    } catch (err) {
+      console.error('add payment error', err);
+      errEl.textContent = err.message || 'Save nahi hua';
+      errEl.classList.remove('hidden');
+    } finally {
+      btn.disabled = false; btnTxt.textContent = 'Save Payment';
+    }
+  });
 }
 
 function renderSettings(c) {
