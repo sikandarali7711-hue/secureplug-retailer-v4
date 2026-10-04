@@ -1901,9 +1901,28 @@ function renderSettings(c) {
 $('refreshBtn').addEventListener('click', async function() {
   const ic = $('refreshBtn').querySelector('i');
   ic.classList.add('spin');
+  
   State.cache = { customers: null, devices: null, payments: null };
-  await renderPage(State.page);
-  setTimeout(function() { ic.classList.remove('spin'); toast('Refreshed', 'ok'); }, 400);
+  
+  try {
+    if (State.session) {
+      const res = await sb.from('businesses').select('*').eq('id', State.businessId).maybeSingle();
+      if (res.data) State.business = res.data;
+    }
+  } catch (e) {
+    console.warn('refresh business error', e);
+  }
+  
+  try {
+    await renderPage(State.page);
+  } catch (e) {
+    console.error('refresh render error', e);
+  }
+  
+  setTimeout(function() { 
+    ic.classList.remove('spin'); 
+    toast('Refreshed', 'ok'); 
+  }, 400);
 });
 
 if ('serviceWorker' in navigator) {
