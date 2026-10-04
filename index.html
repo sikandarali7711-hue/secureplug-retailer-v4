@@ -1273,6 +1273,65 @@ async function openDeviceDetail(parentContainer, deviceId) {
             }).join('')
         ) +
       '</div>' +
+     // ═══ LOCATION SECTION ═══
+'<div class="glass p-5">' +
+  '<div class="flex items-center justify-between mb-3">' +
+    '<p class="text-xs text-white/40 uppercase tracking-wider">Live Location</p>' +
+    '<button id="refreshLocBtn" class="text-[10px] text-[#ff6b35] font-semibold flex items-center gap-1 active:scale-95">' +
+      '<i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh' +
+    '</button>' +
+  '</div>' +
+  '<div id="mapContainer" style="height: 200px;" class="rounded-xl overflow-hidden bg-white/5">' +
+    '<div class="flex flex-col items-center justify-center h-full text-white/30 text-xs">' +
+      '<i data-lucide="map-pin" class="w-8 h-8 mb-2"></i>' +
+      '<p>Location unavailable</p>' +
+    '</div>' +
+  '</div>' +
+  '<div id="locAddress" class="text-xs text-white/50 mt-3 text-center">Location available nahi (DPC app zaroori)</div>' +
+  '<div id="locUpdated" class="text-[10px] text-white/30 mt-1 text-center">Last updated: —</div>' +
+'</div>' +
+
+// ═══ SIM INFO ═══
+'<div class="glass p-5">' +
+  '<div class="flex items-center justify-between mb-3">' +
+    '<p class="text-xs text-white/40 uppercase tracking-wider">SIM Info</p>' +
+    '<i data-lucide="phone" class="w-4 h-4 text-white/30"></i>' +
+  '</div>' +
+  '<div id="simInfoList">' +
+    '<div class="text-center py-6">' +
+      '<i data-lucide="smartphone" class="w-10 h-10 mx-auto text-white/20 mb-2"></i>' +
+      '<p class="text-xs text-white/40">SIM info available nahi (DPC app zaroori)</p>' +
+    '</div>' +
+  '</div>' +
+'</div>' +
+
+// ═══ BATTERY DETAILS ═══
+'<div class="glass p-5">' +
+  '<p class="text-xs text-white/40 uppercase tracking-wider mb-3">Battery Details</p>' +
+  '<div class="grid grid-cols-2 gap-3">' +
+    '<div class="glass-2 p-3 rounded-xl">' +
+      '<p class="text-[10px] text-white/40">Level</p>' +
+      '<p class="font-bold mt-0.5" id="battLevel">—</p>' +
+    '</div>' +
+    '<div class="glass-2 p-3 rounded-xl">' +
+      '<p class="text-[10px] text-white/40">Charging</p>' +
+      '<p class="font-bold mt-0.5" id="battCharging">—</p>' +
+    '</div>' +
+    '<div class="glass-2 p-3 rounded-xl">' +
+      '<p class="text-[10px] text-white/40">Health</p>' +
+      '<p class="font-bold mt-0.5" id="battHealth">—</p>' +
+    '</div>' +
+    '<div class="glass-2 p-3 rounded-xl">' +
+      '<p class="text-[10px] text-white/40">Temperature</p>' +
+      '<p class="font-bold mt-0.5" id="battTemp">—</p>' +
+    '</div>' +
+  '</div>' +
+'</div>' +
+
+// ═══ DELETE DEVICE ═══
+'<button id="deleteDeviceBtn" class="w-full glass-2 py-3.5 rounded-2xl text-red-400 font-medium flex items-center justify-center gap-2 active:scale-95 ripple">' +
+  '<i data-lucide="trash-2" class="w-4 h-4"></i> Delete Device' +
+'</button>' +
 
     '</div>';
 
