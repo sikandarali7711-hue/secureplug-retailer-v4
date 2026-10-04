@@ -1447,6 +1447,119 @@ async function sendDeviceCommand(device, commandType, payload) {
     toast('Exception: ' + (err.message || 'Unknown'), 'err');
   }
 }
+  /* ═══════════════════════════════════════════════════
+   QR ENROLL MODAL
+═══════════════════════════════════════════════════ */
+function openQrEnrollModal(device) {
+  const enrollmentToken = 'ENR-' + Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Date.now().toString(36).toUpperCase();
+
+  const qrData = JSON.stringify({
+    type: 'secureplug_enroll',
+    device_id: device.id,
+    business_id: State.businessId,
+    enrollment_token: enrollmentToken,
+    imei: device.imei || '',
+    business_name: State.business ? State.business.name : ''
+  });
+
+  const html = '<div class="modal-overlay" id="qrEnrollModal"><div class="modal-sheet">' +
+    '<div class="sticky top-0 bg-[#14141c] z-10 px-5 pt-5 pb-3 border-b border-white/5">' +
+      '<div class="flex items-center justify-between">' +
+        '<div><h3 class="text-lg font-bold">QR Enroll</h3><p class="text-xs text-white/40">Customer ke phone par scan karein</p></div>' +
+        '<button id="closeQrModal" class="w-9 h-9 glass-2 rounded-xl flex items-center justify-center active:scale-95"><i data-lucide="x" class="w-4 h-4"></i></button>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="p-5 space-y-4 pb-8 text-center">' +
+
+      '<div class="glass-2 p-4 rounded-2xl">' +
+        '<p class="text-xs text-white/50 mb-1">Device</p>' +
+        '<p class="font-semibold">' + escapeHtml((device.brand || '') + ' ' + (device.model || 'Device')) + '</p>' +
+        '<p class="text-[10px] text-white/40 font-mono mt-1">' + escapeHtml(device.imei || '') + '</p>' +
+      '</div>' +
+
+      '<div class="glass-2 p-4 rounded-2xl">' +
+        '<div id="qrContainer" class="bg-white p-4 rounded-xl inline-block mb-3">' +
+          '<canvas id="qrCanvas"></canvas>' +
+        '</div>' +
+        '<p class="text-xs text-white/50">QR ko DPC app se scan karein</p>' +
+        '<p class="text-[10px] text-white/30 mt-1" id="tokenDisplay">Token: ' + enrollmentToken + '</p>' +
+      '</div>' +
+
+      '<div class="glass-2 p-4 rounded-2xl">' +
+        '<p class="text-xs text-white/50 mb-2">QR Valid For</p>' +
+        '<p class="text-2xl font-extrabold text-[#ff6b35]" id="qrTimer">05:00</p>' +
+        '<p class="text-[10px] text-white/40 mt-1">Iske baad QR expire ho jayega</p>' +
+      '</div>' +
+
+      '<div class="glass-2 p-4 rounded-2xl text-left">' +
+        '<p class="text-xs text-white/50 mb-2 font-semibold">Instructions:</p>' +
+        '<ol class="text-xs text-white/60 space-y-1 list-decimal list-inside">' +
+          '<li>Customer ke phone par <b>SecurePlug DPC</b> app install karein</li>' +
+          '<li>App kholein aur "Enroll Device" tap karein</li>' +
+          '<li>Is QR code ko scan karein</li>' +
+          '<li>App automatically enroll ho jayegi</li>' +
+        '</ol>' +
+      '</div>' +
+
+      '<button id="regenerateQrBtn" class="w-full glass-2 py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2 active:scale-95 ripple">' +
+        '<i data-lucide="refresh-cw" class="w-4 h-4"></i> Regenerate QR' +
+      '</button>' +
+
+    '</div>' +
+  '</div></div>';
+
+  $('modalRoot').innerHTML = html;
+  icons();
+
+  const modal = $('qrEnrollModal');
+  setTimeout(function() { modal.classList.add('show'); }, 10);
+  const close = function() {
+    if (window._qrTimerInterval) clearInterval(window._qrTimerInterval);
+    modal.classList.remove('show');
+    setTimeout(function() { $('modalRoot').innerHTML = ''; }, 300);
+  };
+  $('closeQrModal').addEventListener('click', close);
+  modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
+
+  function generateQr(data) {
+    const canvas = $('qrCanvas');
+    if (!canvas || typeof QRCode === 'undefined') return;
+    QRCode.toCanvas(canvas, data, {
+      width: 220,
+      margin: 1,
+      color: { dark: '#0a0a0f', light: '#ffffff' }
+    }, function(err) {
+      if (err) console.error('QR error', err);
+    });
+  }
+
+  generateQr(qrData);
+
+  let secondsLeft = 300;
+  function updateTimer() {
+    const m = Math.floor(secondsLeft / 60);
+    const s = secondsLeft % 60;
+    const timerEl = $('qrTimer');
+    if (timerEl) {
+      timerEl.textContent = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+      if (secondsLeft <= 30) timerEl.style.color = '#ef4444';
+    }
+    if (secondsLeft <= 0) {
+      clearInterval(window._qrTimerInterval);
+      if (timerEl) timerEl.textContent = 'EXPIRED';
+    }
+    secondsLeft--;
+  }
+  updateTimer();
+  if (window._qrTimerInterval) clearInterval(window._qrTimerInterval);
+  window._qrTimerInterval = setInterval(updateTimer, 1000);
+
+  $('regenerateQrBtn').addEventListener('click', function() {
+    close();
+    setTimeout(function() { openQrEnrollModal(device); }, 350);
+  });
+}
 /* ═══════════════════════════════════════════════════
    SEND NOTICE MODAL
 ═══════════════════════════════════════════════════ */
