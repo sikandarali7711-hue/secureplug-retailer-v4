@@ -722,9 +722,306 @@ async function openCustomerDetail(parentContainer, customerId) {
   }
 }
 
-function renderDevices(c) {
-  c.innerHTML = '<div class="fade-up space-y-4"><div class="glass p-6 text-center"><i data-lucide="smartphone" class="w-12 h-12 mx-auto text-white/20 mb-3"></i><p class="text-sm text-white/60">Devices page next part mein aayega</p></div></div>';
+/* ═══════════════════════════════════════════════════
+   DEVICES — LIST + FILTER + ADD
+═══════════════════════════════════════════════════ */
+async function renderDevices(c) {
+  c.innerHTML = '<div class="fade-up space-y-4"><div class="skel h-14"></div><div class="skel h-32"></div><div class="skel h-32"></div></div>';
+
+  try {
+    const bid = State.businessId;
+    if (!bid) { c.innerHTML = '<div class="glass p-6 text-center text-red-400">Business ID missing</div>'; return; }
+
+    const [devRes, custRes] = await Promise.all([
+      sb.from('devices').select('*').eq('business_id', bid).order('created_at', { ascending: false }),
+      sb.from('customers').select('id, name, phone').eq('business_id', bid)
+    ]);
+
+    if (devRes.error) throw devRes.error;
+    const devices = devRes.data || [];
+    const customers = custRes.data || [];
+
+    State.cache.devices = devices;
+    State.cache.customers = customers;
+
+    renderDevicesList(c, devices, customers, 'all', '');
+
+  } catch (err) {
+    console.error('renderDevices error', err);
+    c.innerHTML = '<div class="fade-up glass p-6 text-center"><i data-lucide="alert-circle" class="w-10 h-10 mx-auto text-red-400 mb-2"></i><p class="text-sm text-red-400">Devices load nahi ho paye</p><p class="text-xs text-white/40 mt-2">' + escapeHtml(err.message || 'Unknown error') + '</p></div>';
+    icons();
+  }
+}
+
+function renderDevicesList(c, devices, customers, filter, searchQuery) {
+  // Filter logic
+  let filtered = devices;
+  if (filter === 'active')  filtered = devices.filter(d => (d.status || 'active') === 'active');
+  if (filter === 'locked')  filtered = devices.filter(d => d.status === 'locked');
+  if (filter === 'overdue') filtered = devices.filter(d => d.status === 'overdue');
+
+  // Search
+  if (searchQuery) {
+    filtered = filtered.filter(d => {
+      const cust = customers.find(cu => cu.id === d.customer_id);
+      return (d.imei || '').toLowerCase().indexOf(searchQuery) !== -1 ||
+             (d.model || '').toLowerCase().indexOf(searchQuery) !== -1 ||
+             (d.brand || '').toLowerCase().indexOf(searchQuery) !== -1 ||
+             (cust && (cust.name || '').toLowerCase().indexOf(searchQuery) !== -1);
+    });
+  }
+
+  let listHtml = '';
+  if (filtered.length === 0) {
+    if (devices.length === 0) {
+      listHtml = '<div class="glass p-10 text-center"><i data-lucide="smartphone" class="w-12 h-12 mx-auto text-white/20 mb-3"></i><p class="text-sm text-white/60 font-medium">Abhi koi device nahi</p><p class="text-xs text-white/40 mt-1">Tap "Add Device" to enroll your first device</p></div>';
+    } else {
+      listHtml = '<div class="glass p-8 text-center"><i data-lucide="search-x" class="w-10 h-10 mx-auto text-white/20 mb-2"></i><p class="text-sm text-white/50">Kuch nahi mila</p></div>';
+    }
+  } else {
+    listHtml = filtered.map(function(d) {
+      const cust = customers.find(function(cu) { return cu.id === d.customer_id; });
+      const status = d.status || 'active';
+      const badgeClass = status === 'locked' ? 'badge-red' : status === 'overdue' ? 'badge-orange' : 'badge-green';
+      const badgeText = status === 'locked' ? '🔒 Locked' : status === 'overdue' ? '⚠ Overdue' : '● Active';
+
+      return '<div class="glass p-4 card-lift cursor-pointer" data-dev-id="' + d.id + '">' +
+        '<div class="flex items-center gap-3">' +
+          '<div class="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0" style="background: linear-gradient(135deg,#8b5cf6,#6366f1);">' +
+            '<i data-lucide="smartphone" class="w-5 h-5 text-white"></i>' +
+          '</div>' +
+          '<div class="flex-1 min-w-0">' +
+            '<div class="flex items-center gap-2 flex-wrap">' +
+              '<p class="font-semibold text-sm truncate">' + escapeHtml(d.model || d.brand || 'Device') + '</p>' +
+              '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' +
+            '</div>' +
+            '<p class="text-xs text-white/50 mt-0.5 truncate">' + escapeHtml(cust ? cust.name : 'Unknown customer') + '</p>' +
+            '<p class="text-[10px] text-white/30 mt-0.5 font-mono">IMEI: ' + escapeHtml(d.imei || '—') + '</p>' +
+          '</div>' +
+          '<i data-lucide="chevron-right" class="w-4 h-4 text-white/30 flex-shrink-0"></i>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  const chip = function(key, label) {
+    return '<button class="chip glass-2 px-4 py-2 rounded-xl text-xs font-medium whitespace-nowrap ' + (filter === key ? 'active' : 'text-white/60') + '" data-filter="' + key + '">' + label + '</button>';
+  };
+
+  c.innerHTML = '<div class="fade-up space-y-4">' +
+    '<div class="flex items-center justify-between">' +
+      '<div><h2 class="text-xl font-bold">Devices</h2><p class="text-xs text-white/40">' + devices.length + ' total</p></div>' +
+      '<button id="addDevBtn" class="btn-grad ripple px-4 py-2.5 rounded-2xl font-semibold text-sm flex items-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i> Add Device</button>' +
+    '</div>' +
+    '<div class="relative"><i data-lucide="search" class="w-4 h-4 text-white/40 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"></i><input id="devSearch" type="text" class="inp pl-11" placeholder="Search IMEI, model, ya customer..." value="' + escapeHtml(searchQuery) + '" /></div>' +
+    '<div class="hscroll flex gap-2 no-sb pb-1">' +
+      chip('all', 'All') +
+      chip('active', '● Active') +
+      chip('locked', '🔒 Locked') +
+      chip('overdue', '⚠ Overdue') +
+    '</div>' +
+    '<div class="space-y-3">' + listHtml + '</div>' +
+  '</div>';
+
   icons();
+
+  // Add button
+  const addBtn = $('addDevBtn');
+  if (addBtn) addBtn.addEventListener('click', function() { openAddDeviceModal(c, customers); });
+
+  // Filter chips
+  c.querySelectorAll('[data-filter]').forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      renderDevicesList(c, devices, customers, chip.dataset.filter, ($('devSearch') && $('devSearch').value.trim().toLowerCase()) || '');
+    });
+  });
+
+  // Search
+  const searchInput = $('devSearch');
+  if (searchInput) {
+    searchInput.addEventListener('input', function(e) {
+      renderDevicesList(c, devices, customers, filter, e.target.value.trim().toLowerCase());
+    });
+    // Preserve cursor position
+    if (searchQuery) {
+      searchInput.focus();
+      searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+    }
+  }
+
+  // Device card click
+  c.querySelectorAll('[data-dev-id]').forEach(function(card) {
+    card.addEventListener('click', function() {
+      openDeviceDetail(c, card.dataset.devId);
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════════
+   ADD DEVICE MODAL — WITH DEVICE LIMIT CHECK
+═══════════════════════════════════════════════════ */
+function openAddDeviceModal(parentContainer, customers) {
+  if (!customers || customers.length === 0) {
+    toast('Pehle customer add karein', 'err');
+    return;
+  }
+
+  const custOptions = customers.map(function(cu) {
+    return '<option value="' + cu.id + '">' + escapeHtml(cu.name || 'Unnamed') + ' — ' + escapeHtml(cu.phone || '') + '</option>';
+  }).join('');
+
+  const html = '<div class="modal-overlay" id="addDevModal"><div class="modal-sheet">' +
+    '<div class="sticky top-0 bg-[#14141c] z-10 px-5 pt-5 pb-3 border-b border-white/5">' +
+      '<div class="flex items-center justify-between">' +
+        '<div><h3 class="text-lg font-bold">Add Device & EMI</h3><p class="text-xs text-white/40">Naya device EMI par dein</p></div>' +
+        '<button id="closeAddDev" class="w-9 h-9 glass-2 rounded-xl flex items-center justify-center active:scale-95"><i data-lucide="x" class="w-4 h-4"></i></button>' +
+      '</div>' +
+    '</div>' +
+    '<form id="addDevForm" class="p-5 space-y-4 pb-8" novalidate>' +
+
+      '<div class="glass-2 p-4 space-y-2">' +
+        '<p class="text-xs text-white/60 font-semibold">Customer *</p>' +
+        '<select name="customer_id" class="inp" required>' + custOptions + '</select>' +
+      '</div>' +
+
+      '<div class="glass-2 p-4 space-y-3">' +
+        '<p class="text-xs text-white/60 font-semibold flex items-center gap-2"><i data-lucide="smartphone" class="w-4 h-4 text-[#ff6b35]"></i> Device Info</p>' +
+        '<input name="brand" class="inp" placeholder="Brand (e.g. Samsung)" />' +
+        '<input name="model" class="inp" placeholder="Model (e.g. Galaxy A14) *" required />' +
+        '<input name="imei" class="inp" placeholder="IMEI number *" inputmode="numeric" required />' +
+      '</div>' +
+
+      '<div class="glass-2 p-4 space-y-3">' +
+        '<p class="text-xs text-white/60 font-semibold flex items-center gap-2"><i data-lucide="wallet" class="w-4 h-4 text-[#ff6b35]"></i> EMI Plan</p>' +
+        '<div class="grid grid-cols-2 gap-3">' +
+          '<div><label class="text-xs text-white/50 mb-2 block">Total Price *</label><input name="total_amount" class="inp" placeholder="50000" inputmode="numeric" required /></div>' +
+          '<div><label class="text-xs text-white/50 mb-2 block">Down Payment</label><input name="down_payment" class="inp" placeholder="10000" inputmode="numeric" /></div>' +
+        '</div>' +
+        '<div class="grid grid-cols-2 gap-3">' +
+          '<div><label class="text-xs text-white/50 mb-2 block">Monthly Amount *</label><input name="monthly_amount" class="inp" placeholder="5000" inputmode="numeric" required /></div>' +
+          '<div><label class="text-xs text-white/50 mb-2 block">Tenure (months) *</label><input name="tenure_months" class="inp" placeholder="8" inputmode="numeric" required /></div>' +
+        '</div>' +
+        '<div><label class="text-xs text-white/50 mb-2 block">First Due Date *</label><input name="first_due_date" type="date" class="inp" required /></div>' +
+      '</div>' +
+
+      '<p id="addDevError" class="hidden text-xs text-red-400 text-center px-2 py-2 rounded-lg bg-red-500/10 border border-red-500/20"></p>' +
+
+      '<button type="submit" id="saveDevBtn" class="btn-grad ripple w-full py-3.5 rounded-2xl font-semibold flex items-center justify-center gap-2"><span id="saveDevText">Save Device + EMI</span></button>' +
+    '</form>' +
+  '</div></div>';
+
+  $('modalRoot').innerHTML = html;
+  icons();
+
+  const modal = $('addDevModal');
+  setTimeout(function() { modal.classList.add('show'); }, 10);
+  const close = function() { modal.classList.remove('show'); setTimeout(function() { $('modalRoot').innerHTML = ''; }, 300); };
+  $('closeAddDev').addEventListener('click', close);
+  modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
+
+  $('addDevForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const errEl = $('addDevError');
+    errEl.classList.add('hidden');
+
+    const customerId = form.customer_id.value;
+    const model = form.model.value.trim();
+    const imei = form.imei.value.trim();
+    const totalAmount = Number(form.total_amount.value || 0);
+    const downPayment = Number(form.down_payment.value || 0);
+    const monthlyAmount = Number(form.monthly_amount.value || 0);
+    const tenureMonths = Number(form.tenure_months.value || 0);
+    const firstDueDate = form.first_due_date.value;
+
+    if (!customerId || !model || !imei || !totalAmount || !monthlyAmount || !tenureMonths || !firstDueDate) {
+      errEl.textContent = 'Zaroori fields bharein (Model, IMEI, Total, Monthly, Tenure, Due date).';
+      errEl.classList.remove('hidden'); return;
+    }
+
+    // ⚠ DEVICE LIMIT CHECK
+    const bizLimit = (State.business && State.business.device_limit) || 0;
+    const { count: currentCount, error: countErr } = await sb
+      .from('devices')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', State.businessId);
+
+    if (countErr) { errEl.textContent = 'Count check fail: ' + countErr.message; errEl.classList.remove('hidden'); return; }
+
+    if (currentCount >= bizLimit) {
+      errEl.textContent = 'Device limit reached (' + bizLimit + '). Admin se limit barhwayein.';
+      errEl.classList.remove('hidden'); return;
+    }
+
+    const btn = $('saveDevBtn'); const btnTxt = $('saveDevText');
+    btn.disabled = true; btnTxt.textContent = 'Saving...';
+
+    try {
+      // 1) Insert device
+      const devPayload = {
+        business_id: State.businessId,
+        customer_id: customerId,
+        brand: form.brand.value.trim() || null,
+        model: model,
+        imei: imei,
+        status: 'active',
+        created_at: new Date().toISOString()
+      };
+      const devRes = await sb.from('devices').insert(devPayload).select().single();
+      if (devRes.error) throw devRes.error;
+
+      const deviceId = devRes.data.id;
+
+      // 2) Insert EMI plan
+      const remaining = totalAmount - downPayment;
+      const emiPayload = {
+        business_id: State.businessId,
+        device_id: deviceId,
+        customer_id: customerId,
+        total_amount: totalAmount,
+        down_payment: downPayment,
+        remaining_amount: remaining,
+        monthly_amount: monthlyAmount,
+        tenure_months: tenureMonths,
+        first_due_date: firstDueDate,
+        paid_months: 0,
+        paid_amount: 0,
+        status: 'active',
+        created_at: new Date().toISOString()
+      };
+      const emiRes = await sb.from('emi_plans').insert(emiPayload);
+      if (emiRes.error) {
+        // Rollback device if EMI fails
+        await sb.from('devices').delete().eq('id', deviceId);
+        throw emiRes.error;
+      }
+
+      toast('Device + EMI save ho gaya!', 'ok');
+      close();
+      renderDevices(parentContainer);
+
+    } catch (err) {
+      console.error('add device error', err);
+      errEl.textContent = err.message || 'Save nahi hua';
+      errEl.classList.remove('hidden');
+    } finally {
+      btn.disabled = false; btnTxt.textContent = 'Save Device + EMI';
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════
+   DEVICE DETAIL — PLACEHOLDER (Part 3-B mein aayega)
+═══════════════════════════════════════════════════ */
+function openDeviceDetail(parentContainer, deviceId) {
+  const c = parentContainer;
+  c.innerHTML = '<div class="fade-up space-y-4">' +
+    '<button id="backToDev" class="glass-2 px-4 py-2 rounded-xl text-sm flex items-center gap-2 active:scale-95"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>' +
+    '<div class="glass p-6 text-center"><i data-lucide="loader" class="w-8 h-8 mx-auto text-[#ff6b35] spin mb-3"></i><p class="text-sm text-white/60">Device detail Part 3-B mein aayega</p><p class="text-xs text-white/30 mt-2">Device ID: ' + escapeHtml(deviceId) + '</p></div>' +
+  '</div>';
+  icons();
+  const backBtn = $('backToDev');
+  if (backBtn) backBtn.addEventListener('click', function() { renderDevices(c); });
 }
 
 function renderPayments(c) {
