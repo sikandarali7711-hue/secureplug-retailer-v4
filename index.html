@@ -1391,6 +1391,11 @@ async function openDeviceDetail(parentContainer, deviceId) {
       openSendNoticeModal(device);
     });
 
+   // QR Generate
+const genQrBtn = $('genQrBtn');
+if (genQrBtn) genQrBtn.addEventListener('click', function() {
+  openQrEnrollModal(device);
+});
   } catch (err) {
     console.error('openDeviceDetail error', err);
     c.innerHTML = '<div class="glass p-6 text-center"><i data-lucide="alert-circle" class="w-10 h-10 mx-auto text-red-400 mb-2"></i><p class="text-sm text-red-400">Device detail load nahi hua</p><p class="text-xs text-white/40 mt-2">' + escapeHtml(err.message || '') + '</p><button onclick="renderDevices(document.getElementById(\'pageContainer\'))" class="btn-grad mt-4 px-4 py-2 rounded-xl text-sm">Back</button></div>';
