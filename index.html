@@ -1332,7 +1332,18 @@ async function openDeviceDetail(parentContainer, deviceId) {
 '<button id="deleteDeviceBtn" class="w-full glass-2 py-3.5 rounded-2xl text-red-400 font-medium flex items-center justify-center gap-2 active:scale-95 ripple">' +
   '<i data-lucide="trash-2" class="w-4 h-4"></i> Delete Device' +
 '</button>' +
-
+     
+// ═══ QR ENROLLMENT ═══
+'<div class="glass p-5">' +
+  '<div class="flex items-center justify-between mb-3">' +
+    '<p class="text-xs text-white/40 uppercase tracking-wider">Enroll Customer Phone</p>' +
+    '<i data-lucide="qr-code" class="w-4 h-4 text-white/30"></i>' +
+  '</div>' +
+  '<p class="text-xs text-white/50 mb-3">Customer ke phone par DPC app install karne ke liye QR code generate karein.</p>' +
+  '<button id="genQrBtn" class="btn-grad ripple w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2">' +
+    '<i data-lucide="qr-code" class="w-4 h-4"></i> Generate QR Code' +
+  '</button>' +
+'</div>' +
     '</div>';
 
     icons();
