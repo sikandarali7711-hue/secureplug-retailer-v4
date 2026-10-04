@@ -1539,62 +1539,8 @@ function openQrEnrollModal(device) {
   modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
 
 function generateQr(data) {
-  const container = $('qrContainer');
-  if (!container) {
-    console.error('QR container not found');
-    return;
-  }
-
-  // Try qrcodejs first (more reliable on mobile)
-  if (typeof QRCode !== 'undefined' && QRCode.prototype && QRCode.prototype.makeCode) {
-    try {
-      container.innerHTML = '';
-      const qr = new QRCode(container, {
-        text: data,
-        width: 220,
-        height: 220,
-        colorDark: '#0a0a0f',
-        colorLight: '#ffffff',
-        correctLevel: QRCode.CorrectLevel.M
-      });
-      console.log('QR generated via qrcodejs');
-      return;
-    } catch (e) {
-      console.error('qrcodejs failed', e);
-    }
-  }
-
-  // Fallback: node-qrcode library (toDataURL)
-  if (typeof QRCode !== 'undefined' && QRCode.toDataURL) {
-    try {
-      const promise = QRCode.toDataURL(data, { width: 220, margin: 1 });
-      if (promise && typeof promise.then === 'function') {
-        promise.then(function(url) {
-          container.innerHTML = '<img src="' + url + '" style="width:220px;height:220px;display:block;" alt="QR" />';
-          console.log('QR generated via toDataURL promise');
-        }).catch(function(err) {
-          console.error('toDataURL promise failed', err);
-        });
-      } else {
-        QRCode.toDataURL(data, { width: 220, margin: 1 }, function(err, url) {
-          if (err) {
-            console.error('toDataURL callback err', err);
-            return;
-          }
-          container.innerHTML = '<img src="' + url + '" style="width:220px;height:220px;display:block;" alt="QR" />';
-          console.log('QR generated via toDataURL callback');
-        });
-      }
-      return;
-    } catch (e) {
-      console.error('node-qrcode failed', e);
-    }
-  }
-
-  console.error('No QR library available');
+  console.log('QR generation disabled — will fix after DPC app');
 }
-}
-
   // QR code — library load hone ke baad generate karein
 setTimeout(function() {
   if (typeof QRCode !== 'undefined') {
