@@ -1469,13 +1469,17 @@ function openQrEnrollModal(device) {
   const enrollmentToken = 'ENR-' + Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Date.now().toString(36).toUpperCase();
 
   const qrData = JSON.stringify({
-    type: 'secureplug_enroll',
-    device_id: device.id,
-    business_id: State.businessId,
-    enrollment_token: enrollmentToken,
-    imei: device.imei || '',
-    business_name: State.business ? State.business.name : ''
-  });
+  type: 'secureplug_enroll',
+  device_id: device.id,
+  business_id: State.businessId,
+  enrollment_token: enrollmentToken,
+  imei: device.imei || '',
+  business_name: State.business ? State.business.name : '',
+  shop_phone: State.business ? (State.business.phone || '') : '',
+  shop_address: State.business ? (State.business.address || '') : '',
+  lock_message: State.business ? (State.business.lock_message || 'Payment karein, phone unlock ho jayega') : 'Payment karein, phone unlock ho jayega',
+  color: State.business ? (State.business.color || 'orange') : 'orange'
+});
 
   const html = '<div class="modal-overlay" id="qrEnrollModal"><div class="modal-sheet">' +
     '<div class="sticky top-0 bg-[#14141c] z-10 px-5 pt-5 pb-3 border-b border-white/5">' +
